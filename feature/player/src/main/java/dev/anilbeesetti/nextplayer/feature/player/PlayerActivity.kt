@@ -574,7 +574,7 @@ class PlayerActivity : ComponentActivity() {
         }
     }
 
-    private fun PlayerApi.apiSubtitleConfigurations() = getSubs().map { subtitle ->
+    private suspend fun PlayerApi.apiSubtitleConfigurations() = getSubs().map { subtitle ->
         uriToSubtitleConfiguration(
             uri = subtitle.uri,
             subtitleEncoding = playerPreferences.subtitleTextEncoding,
