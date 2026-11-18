@@ -133,8 +133,16 @@ class MediaStoreMediaService(
     ): Flow<List<MediaVideo>> = combine(
         videos.onEach { queried ->
             val stored = videoMetadataDao.getAll().associateBy { it.uriString }
-            probeMissingMetadataInBackground(queried, stored)
-            if (pruneStaleMetadata) pruneStaleMetadataInBackground(queried, stored)
+            probeMissingMetadataInBackground(
+                videos = queried,
+                stored = stored,
+            )
+            if (pruneStaleMetadata) {
+                pruneStaleMetadataInBackground(
+                    videos = queried,
+                    stored = stored,
+                )
+            }
         },
         videoMetadataDao.observeAll(),
     ) { queried, stored ->
@@ -391,7 +399,13 @@ class MediaStoreMediaService(
 
     private fun MediaVideo.withStoredMetadata(stored: VideoMetadataEntity?): MediaVideo {
         if (!isMissingMetadata || stored == null || !stored.matches(this)) return this
-        return filledWith(VideoMetadata(stored.duration, stored.width, stored.height))
+        return filledWith(
+            VideoMetadata(
+                duration = stored.duration,
+                width = stored.width,
+                height = stored.height,
+            ),
+        )
     }
 
     private fun MediaVideo.filledWith(metadata: VideoMetadata): MediaVideo = copy(

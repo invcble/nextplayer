@@ -601,7 +601,10 @@ class PlayerService : MediaSessionService() {
             playbackRequestGeneration++
             val request = serviceScope.future {
                 val updatedMediaItems = withContext(Dispatchers.Default) {
-                    withStartItemEnriched(mediaItems, startIndex)
+                    withStartItemEnriched(
+                        mediaItems = mediaItems,
+                        startIndex = startIndex,
+                    )
                 }
                 resetMediaItemEnrichment(updatedMediaItems.getOrNull(startIndex.coerceAtLeast(0)))
                 MediaSession.MediaItemsWithStartPosition(
@@ -940,7 +943,10 @@ class PlayerService : MediaSessionService() {
         cancelPendingMediaItems()
         val generation = ++playbackRequestGeneration
         val updatedItems = withContext(Dispatchers.Default) {
-            withStartItemEnriched(items, index)
+            withStartItemEnriched(
+                mediaItems = items,
+                startIndex = index,
+            )
         }
         if (generation != playbackRequestGeneration || mediaSession !== session) {
             return SessionResult(SessionError.ERROR_INVALID_STATE)
@@ -1210,7 +1216,10 @@ class PlayerService : MediaSessionService() {
             val isSameItem = index < currentPlayer.mediaItemCount &&
                 currentPlayer.getMediaItemAt(index).mediaId == item.mediaId
             if (enriched != null && isSameItem && enrichedMediaIds.add(item.mediaId)) {
-                currentPlayer.replaceMediaItem(index, enriched)
+                currentPlayer.replaceMediaItem(
+                    index,
+                    enriched,
+                )
             }
             onDone()
         }
