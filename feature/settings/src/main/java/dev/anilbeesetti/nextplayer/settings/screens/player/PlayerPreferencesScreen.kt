@@ -202,6 +202,27 @@ private fun PlayerPreferencesScreenContent(
                     onClick = { onAction(PlayerPreferencesUiEvent.ToggleAutoplay) },
                 )
                 PreferenceSwitch(
+                    title = stringResource(id = R.string.remember_video_state),
+                    description = stringResource(id = R.string.remember_video_state_description),
+                    icon = NextIcons.History,
+                    isChecked = state.preferences.rememberVideoState,
+                    onClick = { onAction(PlayerPreferencesUiEvent.ToggleRememberVideoState) },
+                )
+                PreferenceSwitch(
+                    title = stringResource(id = R.string.auto_load_subtitles),
+                    description = stringResource(id = R.string.auto_load_subtitles_description),
+                    icon = NextIcons.Subtitle,
+                    isChecked = state.preferences.autoLoadSubtitles,
+                    onClick = { onAction(PlayerPreferencesUiEvent.ToggleAutoLoadSubtitles) },
+                )
+                PreferenceSwitch(
+                    title = stringResource(id = R.string.lookup_video_title),
+                    description = stringResource(id = R.string.lookup_video_title_description),
+                    icon = NextIcons.Title,
+                    isChecked = state.preferences.lookupVideoTitle,
+                    onClick = { onAction(PlayerPreferencesUiEvent.ToggleLookupVideoTitle) },
+                )
+                PreferenceSwitch(
                     title = stringResource(id = R.string.tunneled_playback),
                     description = stringResource(id = R.string.tunneled_playback_description),
                     icon = NextIcons.Decoder,

@@ -224,6 +224,7 @@ class PlayerService : MediaSessionService() {
             // Autoplay controls the implicit folder queue; explicitly chosen playlists play in full.
             player.pauseAtEndOfMediaItems = !playerPreferences.autoplay &&
                 player.currentMediaItem?.isExplicitPlaylistItem != true
+            enrichNeighboursOfCurrentMediaItem()
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -1186,6 +1187,15 @@ class PlayerService : MediaSessionService() {
             enrichMediaItemAt(index) { player.playWhenReady = playWhenReady }
             return
         }
+        enrichNeighboursOfCurrentMediaItem()
+    }
+
+    /** Items added around the playing one (the folder queue fills in after playback starts). */
+    private fun enrichNeighboursOfCurrentMediaItem() {
+        val player = mediaSession?.player ?: return
+        val currentMediaId = player.currentMediaItem?.mediaId ?: return
+        if (currentMediaId !in enrichedMediaIds) return
+        val index = player.currentMediaItemIndex
         enrichMediaItemAt(index - 1)
         enrichMediaItemAt(index + 1)
     }
@@ -1236,14 +1246,22 @@ class PlayerService : MediaSessionService() {
                 val uri = mediaItem.mediaId.toUri()
                 val isNetwork = mediaItem.isNetworkMediaItem()
 
-                val video = if (isNetwork) {
+                val preferences = playerPreferences
+                // The looked-up video is only used for its title.
+                val needsTitleLookup = mediaItem.mediaMetadata.title == null &&
+                    preferences.lookupVideoTitle
+                val video = if (isNetwork || !needsTitleLookup) {
                     null
                 } else {
-                    mediaRepository.getVideoByUri(
+                    mediaRepository.getVideoByUriWithoutProbing(
                         uri = mediaItem.mediaId,
                     )
                 }
-                val videoState = mediaRepository.getVideoState(uri = mediaItem.mediaId)
+                val videoState = if (preferences.rememberVideoState) {
+                    mediaRepository.getVideoState(uri = mediaItem.mediaId)
+                } else {
+                    null
+                }
 
                 val externalSubs = videoState?.externalSubs ?: emptyList()
                 val savedAudio = videoState?.externalAudio.orEmpty()
@@ -1258,7 +1276,7 @@ class PlayerService : MediaSessionService() {
                             .getOrDefault(defaultValue = false)
                     }
                 }
-                val localSubs = if (!isNetwork) {
+                val localSubs = if (!isNetwork && preferences.autoLoadSubtitles) {
                     (videoState?.path ?: getPath(uri = uri))?.let {
                         File(it).getLocalSubtitles(
                             context = this@PlayerService,

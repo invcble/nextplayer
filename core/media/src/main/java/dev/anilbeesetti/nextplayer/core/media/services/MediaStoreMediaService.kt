@@ -58,12 +58,14 @@ class MediaStoreMediaService(
 
     private val probeDispatcher = Dispatchers.IO.limitedParallelism(PROBE_PARALLELISM)
     private val probingUris = mutableSetOf<Uri>()
+    private val sharedVideos = mutableMapOf<String?, Flow<List<MediaVideo>>>()
 
     companion object {
         private const val OBSERVER_DEBOUNCE_MS = 250L
         private const val PROBE_PARALLELISM = 2
         private const val PROBE_BATCH_SIZE = 20
         private const val DELETE_BATCH_SIZE = 500
+        private const val SHARED_VIDEOS_STOP_TIMEOUT_MS = 5_000L
 
         private val VIDEO_PROJECTION = arrayOf(
             MediaStore.Video.Media._ID,
@@ -110,10 +112,26 @@ class MediaStoreMediaService(
     override fun observeFolders(folderPath: String?): Flow<List<MediaFolder>> =
         observeVideos(folderPath = folderPath).map { it.toFolders() }
 
-    override fun observeVideos(folderPath: String?): Flow<List<MediaVideo>> = withStoredMetadata(
-        videos = observeMedia { queryVideos(folderPath = folderPath) },
-        pruneStaleMetadata = folderPath == null,
-    )
+    /**
+     * Shared per folder so the player, opened from a folder screen, reuses the list that screen
+     * already queried instead of querying MediaStore again before playback.
+     */
+    override fun observeVideos(folderPath: String?): Flow<List<MediaVideo>> =
+        synchronized(sharedVideos) {
+            sharedVideos.getOrPut(folderPath) {
+                withStoredMetadata(
+                    videos = observeMedia { queryVideos(folderPath = folderPath) },
+                    pruneStaleMetadata = folderPath == null,
+                ).shareIn(
+                    scope = applicationScope,
+                    started = SharingStarted.WhileSubscribed(
+                        stopTimeoutMillis = SHARED_VIDEOS_STOP_TIMEOUT_MS,
+                        replayExpirationMillis = 0,
+                    ),
+                    replay = 1,
+                )
+            }
+        }
 
     override fun observeTrashVideos(): Flow<List<MediaVideo>> = withStoredMetadata(
         videos = observeMedia {
@@ -195,6 +213,13 @@ class MediaStoreMediaService(
             val videos = queryVideos(folderPath = folderPath)
             val stored = videoMetadataDao.getAll().associateBy { it.uriString }
             videos.map { it.withStoredMetadata(stored[it.uri.toString()]) }
+        }
+
+    override suspend fun findVideoWithoutProbing(uri: Uri): MediaVideo? =
+        withContext(Dispatchers.IO) {
+            val video = queryVideo(uri = uri) ?: return@withContext null
+            if (!video.isMissingMetadata) return@withContext video
+            video.withStoredMetadata(videoMetadataDao.get(uriString = video.uri.toString()))
         }
 
     override suspend fun findVideo(uri: Uri): MediaVideo? = withContext(Dispatchers.IO) {

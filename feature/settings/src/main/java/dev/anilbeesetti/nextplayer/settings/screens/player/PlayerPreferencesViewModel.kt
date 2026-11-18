@@ -49,6 +49,9 @@ class PlayerPreferencesViewModel(
             is PlayerPreferencesUiEvent.UpdatePlaybackResume -> updatePlaybackResume(action.resume)
 
             is PlayerPreferencesUiEvent.ToggleAutoplay -> toggleAutoplay()
+            is PlayerPreferencesUiEvent.ToggleRememberVideoState -> toggleRememberVideoState()
+            is PlayerPreferencesUiEvent.ToggleAutoLoadSubtitles -> toggleAutoLoadSubtitles()
+            is PlayerPreferencesUiEvent.ToggleLookupVideoTitle -> toggleLookupVideoTitle()
 
             is PlayerPreferencesUiEvent.ToggleTunneledPlayback -> toggleTunneledPlayback()
 
@@ -102,6 +105,30 @@ class PlayerPreferencesViewModel(
     private fun toggleAutoplay() {
         viewModelScope.launch {
             preferencesRepository.updatePlayerPreferences { it.copy(autoplay = !it.autoplay) }
+        }
+    }
+
+    private fun toggleRememberVideoState() {
+        viewModelScope.launch {
+            preferencesRepository.updatePlayerPreferences {
+                it.copy(rememberVideoState = !it.rememberVideoState)
+            }
+        }
+    }
+
+    private fun toggleAutoLoadSubtitles() {
+        viewModelScope.launch {
+            preferencesRepository.updatePlayerPreferences {
+                it.copy(autoLoadSubtitles = !it.autoLoadSubtitles)
+            }
+        }
+    }
+
+    private fun toggleLookupVideoTitle() {
+        viewModelScope.launch {
+            preferencesRepository.updatePlayerPreferences {
+                it.copy(lookupVideoTitle = !it.lookupVideoTitle)
+            }
         }
     }
 
@@ -202,6 +229,9 @@ sealed interface PlayerPreferencesUiEvent {
     data class ShowDialog(val value: PlayerPreferenceDialog?) : PlayerPreferencesUiEvent
     data class UpdatePlaybackResume(val resume: Resume) : PlayerPreferencesUiEvent
     data object ToggleAutoplay : PlayerPreferencesUiEvent
+    data object ToggleRememberVideoState : PlayerPreferencesUiEvent
+    data object ToggleAutoLoadSubtitles : PlayerPreferencesUiEvent
+    data object ToggleLookupVideoTitle : PlayerPreferencesUiEvent
     data object ToggleTunneledPlayback : PlayerPreferencesUiEvent
     data object ToggleAutoPip : PlayerPreferencesUiEvent
     data object ToggleAutoBackgroundPlay : PlayerPreferencesUiEvent

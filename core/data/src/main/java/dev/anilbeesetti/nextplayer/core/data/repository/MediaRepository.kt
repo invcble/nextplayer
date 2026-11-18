@@ -51,6 +51,9 @@ interface MediaRepository {
     suspend fun fetchVideos(folderPath: String? = null): List<Video>
 
     suspend fun getVideoByUri(uri: String): Video?
+
+    /** Like [getVideoByUri], but never probes the file, so it stays fast on the playback path. */
+    suspend fun getVideoByUriWithoutProbing(uri: String): Video? = getVideoByUri(uri)
     suspend fun getVideoState(uri: String): VideoState?
     suspend fun getMediaInfo(uri: String): MediaInfo?
     suspend fun clearPlaybackHistory()
