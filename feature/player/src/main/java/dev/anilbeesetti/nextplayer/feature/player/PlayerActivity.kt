@@ -459,9 +459,14 @@ class PlayerActivity : ComponentActivity() {
 
         val mediaContentUri = if (request.isApiAccess) null else getMediaContentUri(uri)
         val explicitPlaylist = request.getPlaylist()
+        val folderVideos = if (explicitPlaylist.isEmpty() && mediaContentUri != null) {
+            viewModel.getPlaylistFromUri(uri = mediaContentUri)
+        } else {
+            emptyList()
+        }
         val playlist = explicitPlaylist.takeIf { it.isNotEmpty() }
             ?: mediaContentUri?.let { mediaUri ->
-                viewModel.getPlaylistFromUri(uri = mediaUri)
+                folderVideos
                     .map { it.uriString }
                     .toMutableList()
                     .apply {
@@ -492,6 +497,7 @@ class PlayerActivity : ComponentActivity() {
             playlist,
             mediaItemIndexToPlay,
             apiSubs,
+            titlesByUri = folderVideos.associate { it.uriString to it.nameWithExtension },
         )
         ensureActive()
 

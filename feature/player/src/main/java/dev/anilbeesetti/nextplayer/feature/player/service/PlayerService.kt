@@ -92,6 +92,7 @@ import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -135,6 +136,8 @@ class PlayerService : MediaSessionService() {
     private var pendingMediaItemsRequest:
         ListenableFuture<MediaSession.MediaItemsWithStartPosition>? = null
     private var pendingAudioSelection: Pair<String, Uri>? = null
+    private val mediaItemEnrichments = mutableMapOf<String, Deferred<MediaItem>>()
+    private val enrichedMediaIds = mutableSetOf<String>()
 
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var currentVolumeGain: Int = 0
@@ -252,6 +255,7 @@ class PlayerService : MediaSessionService() {
                     mediaSession?.player?.seekTo(it)
                 }
             }
+            enrichAroundCurrentMediaItem()
         }
 
         override fun onPositionDiscontinuity(
@@ -597,8 +601,9 @@ class PlayerService : MediaSessionService() {
             playbackRequestGeneration++
             val request = serviceScope.future {
                 val updatedMediaItems = withContext(Dispatchers.Default) {
-                    updatedMediaItemsWithMetadata(mediaItems = mediaItems)
+                    withStartItemEnriched(mediaItems, startIndex)
                 }
+                resetMediaItemEnrichment(updatedMediaItems.getOrNull(startIndex.coerceAtLeast(0)))
                 MediaSession.MediaItemsWithStartPosition(
                     updatedMediaItems,
                     startIndex,
@@ -619,10 +624,7 @@ class PlayerService : MediaSessionService() {
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>,
-        ): ListenableFuture<MutableList<MediaItem>> = serviceScope.future(Dispatchers.Default) {
-            val updatedMediaItems = updatedMediaItemsWithMetadata(mediaItems = mediaItems)
-            return@future updatedMediaItems.toMutableList()
-        }
+        ): ListenableFuture<MutableList<MediaItem>> = Futures.immediateFuture(mediaItems)
 
         override fun onCustomCommand(
             session: MediaSession,
@@ -938,11 +940,12 @@ class PlayerService : MediaSessionService() {
         cancelPendingMediaItems()
         val generation = ++playbackRequestGeneration
         val updatedItems = withContext(Dispatchers.Default) {
-            updatedMediaItemsWithMetadata(items)
+            withStartItemEnriched(items, index)
         }
         if (generation != playbackRequestGeneration || mediaSession !== session) {
             return SessionResult(SessionError.ERROR_INVALID_STATE)
         }
+        resetMediaItemEnrichment(updatedItems[index])
         return session.player.run {
             setMediaItems(
                 updatedItems,
@@ -1139,6 +1142,79 @@ class PlayerService : MediaSessionService() {
     }
 
     private fun Long.validDurationOrNull(): Long? = takeIf { it != C.TIME_UNSET && it >= 0 }
+
+    private suspend fun withStartItemEnriched(
+        mediaItems: List<MediaItem>,
+        startIndex: Int,
+    ): List<MediaItem> {
+        val index = startIndex.coerceAtLeast(0)
+        val startItem = mediaItems.getOrNull(index) ?: return mediaItems
+        return mediaItems.toMutableList().apply {
+            set(index, updatedMediaItemsWithMetadata(listOf(startItem)).single())
+        }
+    }
+
+    private fun resetMediaItemEnrichment(enrichedStartItem: MediaItem?) {
+        mediaItemEnrichments.values.forEach { it.cancel() }
+        mediaItemEnrichments.clear()
+        enrichedMediaIds.clear()
+        enrichedStartItem?.let { enrichedMediaIds.add(it.mediaId) }
+    }
+
+    /**
+     * Enrichment is lazy so large folders open fast: only the playing item and its
+     * neighbours carry subtitles and saved state. An unenriched current item (a far jump)
+     * is held paused until it is enriched, so it never starts without its subtitles.
+     */
+    private fun enrichAroundCurrentMediaItem() {
+        val player = mediaSession?.player ?: return
+        val index = player.currentMediaItemIndex
+        val currentMediaId = player.currentMediaItem?.mediaId ?: return
+        if (currentMediaId !in enrichedMediaIds) {
+            val playWhenReady = player.playWhenReady
+            player.playWhenReady = false
+            // Replacing the item re-enters this listener, which then enriches the neighbours.
+            enrichMediaItemAt(index) { player.playWhenReady = playWhenReady }
+            return
+        }
+        enrichMediaItemAt(index - 1)
+        enrichMediaItemAt(index + 1)
+    }
+
+    private fun enrichMediaItemAt(index: Int, onDone: () -> Unit = {}) {
+        val player = mediaSession?.player ?: return
+        if (index !in 0 until player.mediaItemCount) return
+        val item = player.getMediaItemAt(index)
+        if (item.mediaId in enrichedMediaIds) {
+            onDone()
+            return
+        }
+        val enrichment = mediaItemEnrichments.getOrPut(item.mediaId) {
+            serviceScope.async(Dispatchers.Default) {
+                updatedMediaItemsWithMetadata(listOf(item)).single()
+            }
+        }
+        serviceScope.launch {
+            val enriched = try {
+                enrichment.await()
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                Logger.logError(
+                    tag = ENRICHMENT_LOG_TAG,
+                    message = "Media item enrichment failed: ${error.message}",
+                )
+                null
+            }
+            if (mediaItemEnrichments[item.mediaId] !== enrichment) return@launch
+            val currentPlayer = mediaSession?.player ?: return@launch
+            val isSameItem = index < currentPlayer.mediaItemCount &&
+                currentPlayer.getMediaItemAt(index).mediaId == item.mediaId
+            if (enriched != null && isSameItem && enrichedMediaIds.add(item.mediaId)) {
+                currentPlayer.replaceMediaItem(index, enriched)
+            }
+            onDone()
+        }
+    }
 
     private suspend fun updatedMediaItemsWithMetadata(
         mediaItems: List<MediaItem>,
@@ -1513,6 +1589,7 @@ private val DecoderTrackType.mediaTrackType: Int
     }
 
 private const val DECODER_LOG_TAG = "Decoder"
+private const val ENRICHMENT_LOG_TAG = "MediaItemEnrichment"
 private const val MAX_SESSION_ARTWORK_SIZE = 500
 
 @get:UnstableApi
