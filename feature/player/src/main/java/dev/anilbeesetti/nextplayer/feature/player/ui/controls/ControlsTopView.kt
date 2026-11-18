@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
+import dev.anilbeesetti.nextplayer.core.model.PlayerControlButton
 import dev.anilbeesetti.nextplayer.core.ui.R
 import dev.anilbeesetti.nextplayer.core.ui.extensions.copy
 import dev.anilbeesetti.nextplayer.core.ui.theme.NextPlayerTheme
@@ -49,6 +50,7 @@ fun ControlsTopView(
     onAudioClick: () -> Unit = {},
     onSubtitleClick: () -> Unit = {},
     onPlaylistClick: () -> Unit = {},
+    hiddenButtons: Set<PlayerControlButton> = emptySet(),
 ) {
     val firstControlFocusRequester = remember { FocusRequester() }
     val systemBarsPadding = WindowInsets.systemBars.union(
@@ -63,7 +65,13 @@ fun ControlsTopView(
             .padding(horizontal = 16.dp)
             .padding(bottom = 16.dp)
             .padding(top = extraTopPadding)
-            .focusProperties { onEnter = { firstControlFocusRequester.requestFocus() } }
+            .focusProperties {
+                onEnter = {
+                    if (PlayerControlButton.DECODER !in hiddenButtons) {
+                        firstControlFocusRequester.requestFocus()
+                    }
+                }
+            }
             .focusGroup(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -87,35 +95,43 @@ fun ControlsTopView(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            PlayerButton(
-                modifier = Modifier
-                    .semantics { contentDescription = decoderDescription }
-                    .focusRequester(focusRequester = firstControlFocusRequester),
-                onClick = onDecoderClick,
-            ) {
-                Text(
-                    text = stringResource((videoDecoderMode ?: DecoderMode.HARDWARE).labelRes),
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1,
-                )
+            if (PlayerControlButton.DECODER !in hiddenButtons) {
+                PlayerButton(
+                    modifier = Modifier
+                        .semantics { contentDescription = decoderDescription }
+                        .focusRequester(focusRequester = firstControlFocusRequester),
+                    onClick = onDecoderClick,
+                ) {
+                    Text(
+                        text = stringResource((videoDecoderMode ?: DecoderMode.HARDWARE).labelRes),
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                    )
+                }
             }
-            PlayerButton(onClick = onPlaylistClick) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_playlist),
-                    contentDescription = null,
-                )
+            if (PlayerControlButton.PLAYLIST !in hiddenButtons) {
+                PlayerButton(onClick = onPlaylistClick) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_playlist),
+                        contentDescription = null,
+                    )
+                }
             }
-            PlayerButton(onClick = onAudioClick) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_audio_track),
-                    contentDescription = null,
-                )
+            if (PlayerControlButton.AUDIO_TRACK !in hiddenButtons) {
+                PlayerButton(onClick = onAudioClick) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_audio_track),
+                        contentDescription = null,
+                    )
+                }
             }
-            PlayerButton(onClick = onSubtitleClick) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_subtitle_track),
-                    contentDescription = null,
-                )
+            if (PlayerControlButton.SUBTITLE !in hiddenButtons) {
+                PlayerButton(onClick = onSubtitleClick) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_subtitle_track),
+                        contentDescription = null,
+                    )
+                }
             }
         }
     }

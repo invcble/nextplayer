@@ -46,6 +46,7 @@ data class PlayerPreferences(
     val hidePlayerButtonsBackground: Boolean = false,
     val useMaterialYouControls: Boolean = false,
     val showRemainingTime: Boolean = false,
+    val hiddenPlayerButtons: Set<PlayerControlButton> = emptySet(),
 
     // Audio Preferences
     val preferredAudioLanguage: String = "",

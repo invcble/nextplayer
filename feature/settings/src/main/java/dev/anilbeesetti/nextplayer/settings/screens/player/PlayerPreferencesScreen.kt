@@ -2,11 +2,17 @@ package dev.anilbeesetti.nextplayer.settings.screens.player
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
@@ -15,15 +21,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.anilbeesetti.nextplayer.core.common.extensions.isPipFeatureSupported
 import dev.anilbeesetti.nextplayer.core.model.ControlButtonsPosition
+import dev.anilbeesetti.nextplayer.core.model.PlayerControlButton
 import dev.anilbeesetti.nextplayer.core.model.PlayerPreferences
 import dev.anilbeesetti.nextplayer.core.model.Resume
 import dev.anilbeesetti.nextplayer.core.model.ScreenOrientation
@@ -266,6 +276,18 @@ private fun PlayerPreferencesScreenContent(
                     onClick = { onAction(PlayerPreferencesUiEvent.ToggleRememberSelections) },
                 )
                 ClickablePreferenceItem(
+                    title = stringResource(id = R.string.player_buttons),
+                    description = stringResource(id = R.string.player_buttons_description),
+                    icon = NextIcons.Player,
+                    onClick = {
+                        onAction(
+                            PlayerPreferencesUiEvent.ShowDialog(
+                                value = PlayerPreferenceDialog.PlayerButtonsDialog,
+                            ),
+                        )
+                    },
+                )
+                ClickablePreferenceItem(
                     title = stringResource(id = R.string.player_screen_orientation),
                     description = state.preferences.playerScreenOrientation.name(),
                     icon = NextIcons.Rotation,
@@ -329,6 +351,29 @@ private fun PlayerPreferencesScreenContent(
                     }
                 }
 
+                PlayerPreferenceDialog.PlayerButtonsDialog -> {
+                    OptionsDialog(
+                        text = stringResource(id = R.string.player_buttons),
+                        onDismissClick = {
+                            onAction(PlayerPreferencesUiEvent.ShowDialog(value = null))
+                        },
+                    ) {
+                        items(PlayerControlButton.entries.toTypedArray()) { button ->
+                            CheckboxTextButton(
+                                text = button.name(),
+                                checked = button !in state.preferences.hiddenPlayerButtons,
+                                onClick = {
+                                    onAction(
+                                        PlayerPreferencesUiEvent.TogglePlayerButtonVisibility(
+                                            button = button,
+                                        ),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+
                 PlayerPreferenceDialog.ControlButtonsDialog -> {
                     OptionsDialog(
                         text = stringResource(id = R.string.control_buttons_alignment),
@@ -365,5 +410,31 @@ private fun PlayerPreferencesScreenPreview() {
             state = PlayerPreferencesUiState(),
             onAction = {},
         )
+    }
+}
+
+@Composable
+private fun CheckboxTextButton(
+    text: String,
+    checked: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = checked,
+                onValueChange = { onClick() },
+                role = Role.Checkbox,
+            )
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = null,
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = text)
     }
 }

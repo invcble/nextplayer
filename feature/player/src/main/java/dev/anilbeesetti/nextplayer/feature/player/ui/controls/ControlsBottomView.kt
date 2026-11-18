@@ -45,6 +45,7 @@ import androidx.media3.common.util.Util.getStringForTime
 import androidx.media3.ui.compose.state.ProgressStateWithTickInterval
 import androidx.media3.ui.compose.state.rememberProgressStateWithTickInterval
 import dev.anilbeesetti.nextplayer.core.common.extensions.isTelevision
+import dev.anilbeesetti.nextplayer.core.model.PlayerControlButton
 import dev.anilbeesetti.nextplayer.core.model.VideoContentScale
 import dev.anilbeesetti.nextplayer.core.ui.R
 import dev.anilbeesetti.nextplayer.core.ui.extensions.copy
@@ -84,6 +85,7 @@ fun ControlsBottomView(
     onPlayInBackgroundClick: () -> Unit,
     onSeek: (Long) -> Unit,
     onSeekEnd: () -> Unit,
+    hiddenButtons: Set<PlayerControlButton> = emptySet(),
 ) {
     val systemBarsPadding = WindowInsets.systemBars.union(
         WindowInsets.displayCutout,
@@ -155,7 +157,9 @@ fun ControlsBottomView(
                         )
                     }
 
-                    if (chaptersState.chapters.isNotEmpty()) {
+                    if (chaptersState.chapters.isNotEmpty() &&
+                        PlayerControlButton.CHAPTERS !in hiddenButtons
+                    ) {
                         PlayerButton(
                             modifier = Modifier.weight(
                                 weight = 1f,
@@ -203,12 +207,14 @@ fun ControlsBottomView(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        PlaybackSpeedButton(
-                            player = player,
-                            onClick = onPlaybackSpeedClick,
-                        )
+                        if (PlayerControlButton.PLAYBACK_SPEED !in hiddenButtons) {
+                            PlaybackSpeedButton(
+                                player = player,
+                                onClick = onPlaybackSpeedClick,
+                            )
+                        }
 
-                        if (!isTv) {
+                        if (!isTv && PlayerControlButton.ROTATE !in hiddenButtons) {
                             RotateButton()
                         }
                     }
@@ -231,22 +237,26 @@ fun ControlsBottomView(
                     alignment = controlsAlignment,
                 ),
             ) {
-                PlayerButton(onClick = onLockControlsClick) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_lock_open),
-                        contentDescription = null,
-                    )
+                if (PlayerControlButton.LOCK !in hiddenButtons) {
+                    PlayerButton(onClick = onLockControlsClick) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_lock_open),
+                            contentDescription = null,
+                        )
+                    }
                 }
-                PlayerButton(
-                    onClick = onVideoContentScaleClick,
-                    onLongClick = onVideoContentScaleLongClick,
-                ) {
-                    Icon(
-                        painter = painterResource(videoContentScale.drawableRes()),
-                        contentDescription = null,
-                    )
+                if (PlayerControlButton.CONTENT_SCALE !in hiddenButtons) {
+                    PlayerButton(
+                        onClick = onVideoContentScaleClick,
+                        onLongClick = onVideoContentScaleLongClick,
+                    ) {
+                        Icon(
+                            painter = painterResource(videoContentScale.drawableRes()),
+                            contentDescription = null,
+                        )
+                    }
                 }
-                if (isPipSupported) {
+                if (isPipSupported && PlayerControlButton.PICTURE_IN_PICTURE !in hiddenButtons) {
                     PlayerButton(onClick = onPictureInPictureClick) {
                         Icon(
                             painter = painterResource(R.drawable.ic_pip),
@@ -254,20 +264,30 @@ fun ControlsBottomView(
                         )
                     }
                 }
-                PlayerButton(onClick = onPlayInBackgroundClick) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_headset),
-                        contentDescription = null,
-                    )
+                if (PlayerControlButton.BACKGROUND_PLAY !in hiddenButtons) {
+                    PlayerButton(onClick = onPlayInBackgroundClick) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_headset),
+                            contentDescription = null,
+                        )
+                    }
                 }
-                LoopButton(player = player)
-                ShuffleButton(player = player)
+                if (PlayerControlButton.LOOP !in hiddenButtons) {
+                    LoopButton(player = player)
+                }
+                if (PlayerControlButton.SHUFFLE !in hiddenButtons) {
+                    ShuffleButton(player = player)
+                }
                 if (useCompactControls) {
-                    PlaybackSpeedButton(
-                        player = player,
-                        onClick = onPlaybackSpeedClick,
-                    )
-                    RotateButton()
+                    if (PlayerControlButton.PLAYBACK_SPEED !in hiddenButtons) {
+                        PlaybackSpeedButton(
+                            player = player,
+                            onClick = onPlaybackSpeedClick,
+                        )
+                    }
+                    if (PlayerControlButton.ROTATE !in hiddenButtons) {
+                        RotateButton()
+                    }
                 }
             }
         }

@@ -70,6 +70,7 @@ fun PlayerControls(
                     onSubtitleClick = { onShowOverlay(OverlayView.SUBTITLE_SELECTOR) },
                     onPlaylistClick = { onShowOverlay(OverlayView.PLAYLIST) },
                     onBackClick = onBackClick,
+                    hiddenButtons = playerPreferences.hiddenPlayerButtons,
                 )
             }
             Spacer(modifier = Modifier.weight(weight = 1f))
@@ -92,6 +93,7 @@ fun PlayerControls(
                     videoContentScale = videoZoomAndContentScaleState.videoContentScale,
                     isPipSupported = isPipSupported,
                     showRemainingTime = playerPreferences.showRemainingTime,
+                    hiddenButtons = playerPreferences.hiddenPlayerButtons,
                     onToggleTimeDisplay = onToggleTimeDisplay,
                     onSeek = seekGestureState::onSeek,
                     onSeekEnd = seekGestureState::onSeekEnd,
