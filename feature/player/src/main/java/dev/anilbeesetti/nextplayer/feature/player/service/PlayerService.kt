@@ -57,6 +57,7 @@ import dev.anilbeesetti.nextplayer.core.model.PlayerPreferences
 import dev.anilbeesetti.nextplayer.core.model.Resume
 import dev.anilbeesetti.nextplayer.core.ui.R as coreUiR
 import dev.anilbeesetti.nextplayer.feature.player.PlayerActivity
+import dev.anilbeesetti.nextplayer.feature.player.VideoStateStore
 import dev.anilbeesetti.nextplayer.feature.player.R
 import dev.anilbeesetti.nextplayer.feature.player.extensions.addAdditionalSubtitleConfiguration
 import dev.anilbeesetti.nextplayer.feature.player.extensions.audioDecoderMode
@@ -122,6 +123,10 @@ class PlayerService : MediaSessionService() {
     private val dataSourceFactory: NextDataSourceFactory by inject()
 
     private val mediaRepository: MediaRepository by inject()
+
+    private val videoStateStore by lazy {
+        VideoStateStore(mediaRepository) { playerPreferences.rememberVideoState }
+    }
 
     private val imageLoader: ImageLoader by inject()
 
@@ -287,7 +292,7 @@ class PlayerService : MediaSessionService() {
                         oldMediaItem.copy(positionMs = updatedPosition),
                     )
                     serviceScope.launch {
-                        mediaRepository.updateMediumPosition(
+                        videoStateStore.updateMediumPosition(
                             uri = oldMediaItem.mediaId,
                             position = updatedPosition,
                         )
@@ -299,7 +304,7 @@ class PlayerService : MediaSessionService() {
                         val durationMs = oldMediaItem.mediaMetadata.durationMs
                         val isAtEnd =
                             durationMs != null && oldPosition.positionMs >= durationMs - 1000
-                        mediaRepository.updateMediumPosition(
+                        videoStateStore.updateMediumPosition(
                             uri = oldMediaItem.mediaId,
                             position = if (isAtEnd) C.TIME_UNSET else oldPosition.positionMs,
                         )
@@ -363,7 +368,7 @@ class PlayerService : MediaSessionService() {
 
             if (audioTrackIndex != null) {
                 serviceScope.launch {
-                    mediaRepository.updateMediumAudioTrack(
+                    videoStateStore.updateMediumAudioTrack(
                         uri = currentMediaItem.mediaId,
                         audioTrackIndex = audioTrackIndex,
                     )
@@ -372,7 +377,7 @@ class PlayerService : MediaSessionService() {
 
             if (subtitleTrackIndex != null) {
                 serviceScope.launch {
-                    mediaRepository.updateMediumSubtitleTrack(
+                    videoStateStore.updateMediumSubtitleTrack(
                         uri = currentMediaItem.mediaId,
                         subtitleTrackIndex = subtitleTrackIndex,
                     )
@@ -512,7 +517,7 @@ class PlayerService : MediaSessionService() {
             )
 
             serviceScope.launch {
-                mediaRepository.updateMediumLastPlayedTime(
+                videoStateStore.updateMediumLastPlayedTime(
                     uri = currentMediaItem.mediaId,
                     lastPlayedTime = System.currentTimeMillis(),
                     duration = duration,
@@ -524,7 +529,7 @@ class PlayerService : MediaSessionService() {
             super.onIsPlayingChanged(isPlaying)
             mediaSession?.run {
                 serviceScope.launch {
-                    mediaRepository.updateMediumPosition(
+                    videoStateStore.updateMediumPosition(
                         uri = player.currentMediaItem?.mediaId ?: return@launch,
                         position = player.currentPosition,
                     )
@@ -654,15 +659,15 @@ class PlayerService : MediaSessionService() {
                             it.type == C.TRACK_TYPE_TEXT && it.isSupported
                         }
 
-                        mediaRepository.updateMediumPosition(
+                        videoStateStore.updateMediumPosition(
                             uri = currentMediaItem.mediaId,
                             position = player.currentPosition,
                         )
-                        mediaRepository.updateMediumSubtitleTrack(
+                        videoStateStore.updateMediumSubtitleTrack(
                             uri = currentMediaItem.mediaId,
                             subtitleTrackIndex = textTracks.size,
                         )
-                        mediaRepository.addExternalSubtitleToMedium(
+                        videoStateStore.addExternalSubtitleToMedium(
                             uri = currentMediaItem.mediaId,
                             subtitleUri = subtitleUri,
                         )
@@ -703,7 +708,7 @@ class PlayerService : MediaSessionService() {
                     if (player.currentMediaItem?.mediaId != mediaItem.mediaId) {
                         return@future SessionResult(SessionError.ERROR_INVALID_STATE)
                     }
-                    mediaRepository.addExternalAudioToMedium(
+                    videoStateStore.addExternalAudioToMedium(
                         mediaItem.mediaId,
                         audioUri = uri,
                     )
@@ -1110,7 +1115,7 @@ class PlayerService : MediaSessionService() {
             player.clearMediaItems()
             player.stop()
             mediaItem?.let {
-                mediaRepository.updateMediumPosition(
+                videoStateStore.updateMediumPosition(
                     uri = mediaItem.mediaId,
                     position = position,
                 )

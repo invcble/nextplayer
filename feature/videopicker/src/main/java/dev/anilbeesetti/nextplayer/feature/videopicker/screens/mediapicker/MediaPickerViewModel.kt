@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
@@ -205,7 +206,12 @@ class MediaPickerViewModel(
                 }
             }
             launch {
-                getRecentlyPlayedVideoUseCase(folderPath).collect { recentlyPlayed ->
+                combine(
+                    getRecentlyPlayedVideoUseCase(folderPath),
+                    preferencesRepository.playerPreferences,
+                ) { recentlyPlayed, playerPreferences ->
+                    recentlyPlayed.takeIf { playerPreferences.rememberVideoState }
+                }.collect { recentlyPlayed ->
                     stateInternal.update { it.copy(recentlyPlayedVideo = recentlyPlayed) }
                 }
             }

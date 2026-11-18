@@ -56,7 +56,7 @@
     <string name="autoplay_settings">Autoplay</string>
     <string name="autoplay_settings_description">Automatically play the next video in the current folder</string>
     <string name="remember_video_state">Remember per-video state</string>
-    <string name="remember_video_state_description">Restore position, tracks, zoom, subtitle timing and added files for each video. Turn off for faster start</string>
+    <string name="remember_video_state_description">Save and restore position, tracks, zoom, subtitle timing, added files, history and recently played. Turn off for faster start</string>
     <string name="auto_load_subtitles">Auto-load subtitles</string>
     <string name="auto_load_subtitles_description">Load subtitle files next to the video. Turn off for faster start</string>
     <string name="lookup_video_title">Look up video title</string>
