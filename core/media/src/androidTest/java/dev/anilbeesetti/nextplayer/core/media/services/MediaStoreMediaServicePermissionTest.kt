@@ -65,6 +65,7 @@ class MediaStoreMediaServicePermissionTest {
                 MediaStoreMediaService(
                     context = context,
                     applicationScope = applicationScope,
+                    videoMetadataDao = FakeVideoMetadataDao(),
                 ).fetchVideos()
                 fail("Expected MediaStore permission denial to be preserved")
             } catch (_: SecurityException) {
@@ -117,6 +118,7 @@ class MediaStoreMediaServicePermissionTest {
                 MediaStoreMediaService(
                     context = context,
                     applicationScope = applicationScope,
+                    videoMetadataDao = FakeVideoMetadataDao(),
                 ).fetchVideos()
                 fail("Expected a null MediaStore cursor to fail the strict snapshot")
             } catch (_: IllegalStateException) {

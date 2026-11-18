@@ -16,4 +16,7 @@ class DaoModule {
 
     @Factory
     fun providePlaylistDao(db: MediaDatabase) = db.playlistDao()
+
+    @Factory
+    fun provideVideoMetadataDao(db: MediaDatabase) = db.videoMetadataDao()
 }

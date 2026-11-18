@@ -157,6 +157,7 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     androidTestImplementation(project(":core:domain"))
+    androidTestImplementation(project(":core:database"))
     androidTestImplementation(libs.androidx.datastore.core)
     androidTestImplementation(libs.androidx.media3.session)
     androidTestImplementation(libs.androidx.media3.ui)

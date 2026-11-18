@@ -8,11 +8,13 @@ import dev.anilbeesetti.nextplayer.core.database.dao.HiddenVideoDao
 import dev.anilbeesetti.nextplayer.core.database.dao.MediumStateDao
 import dev.anilbeesetti.nextplayer.core.database.dao.NetworkConnectionDao
 import dev.anilbeesetti.nextplayer.core.database.dao.PlaylistDao
+import dev.anilbeesetti.nextplayer.core.database.dao.VideoMetadataDao
 import dev.anilbeesetti.nextplayer.core.database.entities.HiddenVideoEntity
 import dev.anilbeesetti.nextplayer.core.database.entities.MediumStateEntity
 import dev.anilbeesetti.nextplayer.core.database.entities.NetworkConnectionEntity
 import dev.anilbeesetti.nextplayer.core.database.entities.PlaylistEntity
 import dev.anilbeesetti.nextplayer.core.database.entities.PlaylistItemEntity
+import dev.anilbeesetti.nextplayer.core.database.entities.VideoMetadataEntity
 
 @Database(
     entities = [
@@ -21,8 +23,9 @@ import dev.anilbeesetti.nextplayer.core.database.entities.PlaylistItemEntity
         NetworkConnectionEntity::class,
         PlaylistEntity::class,
         PlaylistItemEntity::class,
+        VideoMetadataEntity::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 abstract class MediaDatabase : RoomDatabase() {
@@ -34,6 +37,8 @@ abstract class MediaDatabase : RoomDatabase() {
     abstract fun networkConnectionDao(): NetworkConnectionDao
 
     abstract fun playlistDao(): PlaylistDao
+
+    abstract fun videoMetadataDao(): VideoMetadataDao
 
     companion object {
         const val DATABASE_NAME = "media_db"
@@ -372,6 +377,27 @@ abstract class MediaDatabase : RoomDatabase() {
         ) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(sql = "ALTER TABLE `media_state` ADD COLUMN `duration` INTEGER")
+            }
+        }
+
+        val MIGRATION_13_14 = object : Migration(
+            13,
+            14,
+        ) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    sql = """
+                    CREATE TABLE IF NOT EXISTS `video_metadata` (
+                        `uri` TEXT NOT NULL,
+                        `size` INTEGER NOT NULL,
+                        `date_modified` INTEGER NOT NULL,
+                        `duration` INTEGER NOT NULL,
+                        `width` INTEGER NOT NULL,
+                        `height` INTEGER NOT NULL,
+                        PRIMARY KEY(`uri`)
+                    )
+                    """,
+                )
             }
         }
 

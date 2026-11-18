@@ -165,6 +165,7 @@ class CompatibilityPickerTest {
                 val service = MediaStoreMediaService(
                     wrapped,
                     scope,
+                    FakeVideoMetadataDao(),
                 )
                 try {
                     val first = checkNotNull(service.findVideo(uri))
