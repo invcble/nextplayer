@@ -1156,7 +1156,10 @@ class PlayerService : MediaSessionService() {
         val index = startIndex.coerceAtLeast(0)
         val startItem = mediaItems.getOrNull(index) ?: return mediaItems
         return mediaItems.toMutableList().apply {
-            set(index, updatedMediaItemsWithMetadata(listOf(startItem)).single())
+            set(
+                index,
+                updatedMediaItemsWithMetadata(listOf(startItem)).single(),
+            )
         }
     }
 
