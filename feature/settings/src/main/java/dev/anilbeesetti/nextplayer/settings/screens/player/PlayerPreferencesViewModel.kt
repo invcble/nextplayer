@@ -50,8 +50,7 @@ class PlayerPreferencesViewModel(
             is PlayerPreferencesUiEvent.UpdatePlaybackResume -> updatePlaybackResume(action.resume)
 
             is PlayerPreferencesUiEvent.ToggleAutoplay -> toggleAutoplay()
-            is PlayerPreferencesUiEvent.TogglePlayerButtonVisibility ->
-                togglePlayerButtonVisibility(action.button)
+            is PlayerPreferencesUiEvent.TogglePlayerButton -> togglePlayerButton(action.button)
             is PlayerPreferencesUiEvent.ToggleRememberVideoState -> toggleRememberVideoState()
             is PlayerPreferencesUiEvent.ToggleAutoLoadSubtitles -> toggleAutoLoadSubtitles()
             is PlayerPreferencesUiEvent.ToggleLookupVideoTitle -> toggleLookupVideoTitle()
@@ -111,7 +110,7 @@ class PlayerPreferencesViewModel(
         }
     }
 
-    private fun togglePlayerButtonVisibility(button: PlayerControlButton) {
+    private fun togglePlayerButton(button: PlayerControlButton) {
         viewModelScope.launch {
             preferencesRepository.updatePlayerPreferences {
                 val hidden = it.hiddenPlayerButtons
@@ -243,8 +242,7 @@ sealed interface PlayerPreferencesUiEvent {
     data class ShowDialog(val value: PlayerPreferenceDialog?) : PlayerPreferencesUiEvent
     data class UpdatePlaybackResume(val resume: Resume) : PlayerPreferencesUiEvent
     data object ToggleAutoplay : PlayerPreferencesUiEvent
-    data class TogglePlayerButtonVisibility(val button: PlayerControlButton) :
-        PlayerPreferencesUiEvent
+    data class TogglePlayerButton(val button: PlayerControlButton) : PlayerPreferencesUiEvent
     data object ToggleRememberVideoState : PlayerPreferencesUiEvent
     data object ToggleAutoLoadSubtitles : PlayerPreferencesUiEvent
     data object ToggleLookupVideoTitle : PlayerPreferencesUiEvent

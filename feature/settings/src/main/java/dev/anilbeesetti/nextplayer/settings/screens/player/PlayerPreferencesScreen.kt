@@ -364,7 +364,7 @@ private fun PlayerPreferencesScreenContent(
                                 checked = button !in state.preferences.hiddenPlayerButtons,
                                 onClick = {
                                     onAction(
-                                        PlayerPreferencesUiEvent.TogglePlayerButtonVisibility(
+                                        PlayerPreferencesUiEvent.TogglePlayerButton(
                                             button = button,
                                         ),
                                     )
@@ -414,11 +414,7 @@ private fun PlayerPreferencesScreenPreview() {
 }
 
 @Composable
-private fun CheckboxTextButton(
-    text: String,
-    checked: Boolean,
-    onClick: () -> Unit,
-) {
+private fun CheckboxTextButton(text: String, checked: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
