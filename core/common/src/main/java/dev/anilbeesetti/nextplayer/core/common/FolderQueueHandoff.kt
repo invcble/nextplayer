@@ -6,7 +6,7 @@ package dev.anilbeesetti.nextplayer.core.common
  */
 object FolderQueueHandoff {
 
-    data class Entry(val uri: String, val title: String)
+    data class Entry(val uri: String, val title: String, val width: Int, val height: Int)
 
     private var pending: Pair<String, List<Entry>>? = null
 

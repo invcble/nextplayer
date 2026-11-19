@@ -196,6 +196,8 @@ class MediaPickerViewModel(
                 FolderQueueHandoff.Entry(
                     uri = it.uriString,
                     title = it.nameWithExtension,
+                    width = it.width,
+                    height = it.height,
                 )
             },
         )

@@ -531,6 +531,13 @@ class PlayerActivity : ComponentActivity() {
             val apiSubs = request.apiSubtitleConfigurations()
             val handedOffQueue = FolderQueueHandoff.take(selectedUri = selectedUri)
             if (handedOffQueue != null) {
+                handedOffQueue.forEach {
+                    KnownVideoSizes.put(
+                        mediaId = it.uri,
+                        width = it.width,
+                        height = it.height,
+                    )
+                }
                 val playlist = handedOffQueue.map { it.uri }
                 val selectedIndex = playlist.indexOf(selectedUri)
                 val items = request.createMediaItems(
@@ -566,6 +573,13 @@ class PlayerActivity : ComponentActivity() {
             }
 
             val folderVideos = viewModel.getPlaylistFromUri(uri = mediaContentUri)
+            folderVideos.forEach {
+                KnownVideoSizes.put(
+                    mediaId = it.uriString,
+                    width = it.width,
+                    height = it.height,
+                )
+            }
             val playlist = folderVideos.map { it.uriString }.toMutableList().apply {
                 if (!contains(selectedUri)) {
                     add(
