@@ -50,9 +50,13 @@ class PlayerPreferencesViewModel(
             is PlayerPreferencesUiEvent.UpdatePlaybackResume -> updatePlaybackResume(action.resume)
 
             is PlayerPreferencesUiEvent.ToggleAutoplay -> toggleAutoplay()
+
             is PlayerPreferencesUiEvent.TogglePlayerButton -> togglePlayerButton(action.button)
+
             is PlayerPreferencesUiEvent.ToggleRememberVideoState -> toggleRememberVideoState()
+
             is PlayerPreferencesUiEvent.ToggleAutoLoadSubtitles -> toggleAutoLoadSubtitles()
+
             is PlayerPreferencesUiEvent.ToggleLookupVideoTitle -> toggleLookupVideoTitle()
 
             is PlayerPreferencesUiEvent.ToggleTunneledPlayback -> toggleTunneledPlayback()
