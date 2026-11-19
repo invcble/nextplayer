@@ -19,4 +19,7 @@ class DaoModule {
 
     @Factory
     fun provideVideoMetadataDao(db: MediaDatabase) = db.videoMetadataDao()
+
+    @Factory
+    fun provideFolderListCacheDao(db: MediaDatabase) = db.folderListCacheDao()
 }

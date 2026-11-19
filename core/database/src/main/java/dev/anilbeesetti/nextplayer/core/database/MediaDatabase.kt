@@ -4,11 +4,13 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import dev.anilbeesetti.nextplayer.core.database.dao.FolderListCacheDao
 import dev.anilbeesetti.nextplayer.core.database.dao.HiddenVideoDao
 import dev.anilbeesetti.nextplayer.core.database.dao.MediumStateDao
 import dev.anilbeesetti.nextplayer.core.database.dao.NetworkConnectionDao
 import dev.anilbeesetti.nextplayer.core.database.dao.PlaylistDao
 import dev.anilbeesetti.nextplayer.core.database.dao.VideoMetadataDao
+import dev.anilbeesetti.nextplayer.core.database.entities.FolderListCacheEntity
 import dev.anilbeesetti.nextplayer.core.database.entities.HiddenVideoEntity
 import dev.anilbeesetti.nextplayer.core.database.entities.MediumStateEntity
 import dev.anilbeesetti.nextplayer.core.database.entities.NetworkConnectionEntity
@@ -24,8 +26,9 @@ import dev.anilbeesetti.nextplayer.core.database.entities.VideoMetadataEntity
         PlaylistEntity::class,
         PlaylistItemEntity::class,
         VideoMetadataEntity::class,
+        FolderListCacheEntity::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 abstract class MediaDatabase : RoomDatabase() {
@@ -39,6 +42,8 @@ abstract class MediaDatabase : RoomDatabase() {
     abstract fun playlistDao(): PlaylistDao
 
     abstract fun videoMetadataDao(): VideoMetadataDao
+
+    abstract fun folderListCacheDao(): FolderListCacheDao
 
     companion object {
         const val DATABASE_NAME = "media_db"
@@ -377,6 +382,23 @@ abstract class MediaDatabase : RoomDatabase() {
         ) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(sql = "ALTER TABLE `media_state` ADD COLUMN `duration` INTEGER")
+            }
+        }
+
+        val MIGRATION_14_15 = object : Migration(
+            14,
+            15,
+        ) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    sql = """
+                    CREATE TABLE IF NOT EXISTS `folder_list_cache` (
+                        `key` TEXT NOT NULL,
+                        `data` BLOB NOT NULL,
+                        PRIMARY KEY(`key`)
+                    )
+                    """,
+                )
             }
         }
 

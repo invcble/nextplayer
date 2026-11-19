@@ -12,6 +12,7 @@ import dev.anilbeesetti.nextplayer.core.common.FolderQueueHandoff
 import dev.anilbeesetti.nextplayer.core.common.extensions.prettyName
 import dev.anilbeesetti.nextplayer.core.common.service.system.SystemService
 import dev.anilbeesetti.nextplayer.core.common.storagePermission
+import dev.anilbeesetti.nextplayer.core.data.repository.FolderListCache
 import dev.anilbeesetti.nextplayer.core.data.repository.MediaRepository
 import dev.anilbeesetti.nextplayer.core.data.repository.PlaylistRepository
 import dev.anilbeesetti.nextplayer.core.data.repository.PreferencesRepository
@@ -61,6 +62,7 @@ class MediaPickerViewModel(
     private val getSortedVideosUseCase: GetSortedVideosUseCase,
     private val mediaOperationsService: MediaOperationsService,
     private val mediaRepository: MediaRepository,
+    private val folderListCache: FolderListCache,
     private val playlistRepository: PlaylistRepository,
     private val preferencesRepository: PreferencesRepository,
     private val mediaSynchronizer: MediaSynchronizer,
@@ -215,11 +217,13 @@ class MediaPickerViewModel(
             currentState.copy(mediaDataState = DataState.Loading)
         }
         mediaCollectJob = viewModelScope.launch {
+            launch { showCachedMediaWhileLoading() }
             launch {
                 getSortedMediaUseCase(folderPath).collect { media ->
                     stateInternal.update {
                         it.copy(mediaDataState = DataState.Success(value = media))
                     }
+                    media?.let { cacheMedia(it) }
                 }
             }
             launch {
@@ -233,6 +237,34 @@ class MediaPickerViewModel(
                 }
             }
         }
+    }
+
+    private val folderListCacheKey: String
+        get() = "${stateInternal.value.preferences.mediaViewMode}|${folderPath.orEmpty()}"
+
+    private suspend fun showCachedMediaWhileLoading() {
+        val cached = folderListCache.read(key = folderListCacheKey) ?: return
+        stateInternal.update {
+            if (it.mediaDataState !is DataState.Loading) return@update it
+            it.copy(
+                mediaDataState = DataState.Success(
+                    value = MediaHolder(
+                        videos = cached.videos,
+                        folders = cached.folders,
+                    ),
+                ),
+            )
+        }
+    }
+
+    private suspend fun cacheMedia(media: MediaHolder) {
+        folderListCache.write(
+            key = folderListCacheKey,
+            entry = FolderListCache.Entry(
+                videos = media.videos,
+                folders = media.folders,
+            ),
+        )
     }
 
     private fun collectPreferences() {
