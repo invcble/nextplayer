@@ -8,6 +8,7 @@ import androidx.compose.runtime.Stable
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.viewModelScope
+import dev.anilbeesetti.nextplayer.core.common.FolderQueueHandoff
 import dev.anilbeesetti.nextplayer.core.common.extensions.prettyName
 import dev.anilbeesetti.nextplayer.core.common.service.system.SystemService
 import dev.anilbeesetti.nextplayer.core.common.storagePermission
@@ -113,7 +114,7 @@ class MediaPickerViewModel(
         when (action) {
             is MediaPickerAction.OnNavigateUpClick -> output.navigateUp()
 
-            is MediaPickerAction.OnPlayVideo -> output.playVideo(action.uri)
+            is MediaPickerAction.OnPlayVideo -> playVideo(action.uri)
 
             is MediaPickerAction.OnFolderClick -> output.openFolder(action.folderPath)
 
@@ -185,6 +186,20 @@ class MediaPickerViewModel(
 
             is MediaPickerAction.DismissAddToPlaylist -> dismissAddToPlaylist()
         }
+    }
+
+    private fun playVideo(uri: Uri) {
+        val visibleVideos = (state.value.mediaDataState as? DataState.Success)?.value?.videos
+        FolderQueueHandoff.offer(
+            selectedUri = uri.toString(),
+            entries = visibleVideos.orEmpty().map {
+                FolderQueueHandoff.Entry(
+                    uri = it.uriString,
+                    title = it.nameWithExtension,
+                )
+            },
+        )
+        output.playVideo(uri)
     }
 
     private fun startMediaCollection() {

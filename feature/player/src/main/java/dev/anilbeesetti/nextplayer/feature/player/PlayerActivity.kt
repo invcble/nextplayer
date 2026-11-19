@@ -31,6 +31,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionResult
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import dev.anilbeesetti.nextplayer.core.common.FolderQueueHandoff
 import dev.anilbeesetti.nextplayer.core.common.extensions.getInitialDirectoryUri
 import dev.anilbeesetti.nextplayer.core.common.extensions.getMediaContentUri
 import dev.anilbeesetti.nextplayer.core.common.service.registerForSuspendActivityResult
@@ -520,8 +521,9 @@ class PlayerActivity : ComponentActivity() {
     }
 
     /**
-     * Starts the selected video alone, then adds the rest of its folder around it, so playback
-     * never waits on the folder query.
+     * Starts with the folder screen's handed-off queue when there is one; otherwise starts the
+     * selected video alone and adds the rest of its folder around it, so playback never waits on
+     * the folder query.
      */
     private suspend fun playThenFillFolderQueue(
         request: PlayerApi,
@@ -529,6 +531,27 @@ class PlayerActivity : ComponentActivity() {
     ) = coroutineScope {
         val selectedUri = mediaContentUri.toString()
         val apiSubs = request.apiSubtitleConfigurations()
+        val handedOffQueue = FolderQueueHandoff.take(selectedUri = selectedUri)
+        if (handedOffQueue != null) {
+            val playlist = handedOffQueue.map { it.uri }
+            val selectedIndex = playlist.indexOf(selectedUri)
+            val items = request.createMediaItems(
+                playlist,
+                selectedIndex,
+                apiSubs,
+                titlesByUri = handedOffQueue.associate { it.uri to it.title },
+            )
+            ensureActive()
+            withContext(Dispatchers.Main) {
+                startQueue(
+                    request,
+                    items,
+                    selectedIndex,
+                    request.position?.toLong() ?: C.TIME_UNSET,
+                )
+            }
+            return@coroutineScope
+        }
         val startItems = request.createMediaItems(
             listOf(selectedUri),
             0,
