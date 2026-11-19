@@ -18,6 +18,7 @@ import dev.anilbeesetti.nextplayer.core.database.entities.MediumStateEntity
 import dev.anilbeesetti.nextplayer.core.datastore.datasource.AppPreferencesDataSource
 import dev.anilbeesetti.nextplayer.core.media.network.NetworkUri
 import dev.anilbeesetti.nextplayer.core.media.services.MediaService
+import dev.anilbeesetti.nextplayer.core.media.services.MediaVideo
 import dev.anilbeesetti.nextplayer.core.model.Folder
 import dev.anilbeesetti.nextplayer.core.model.MediaInfo
 import dev.anilbeesetti.nextplayer.core.model.Video
@@ -90,8 +91,21 @@ class LocalMediaRepository(
     override fun observeTrashVideos(): Flow<List<Video>> =
         mediaService.observeTrashVideos().map { videos -> videos.map { it.toVideo() } }
 
-    override suspend fun getVideoByUri(uri: String): Video? = coroutineScope {
-        val mediaVideoDeferred = async { mediaService.findVideo(uri.toUri()) }
+    override suspend fun getVideoByUri(uri: String): Video? = getVideoByUri(
+        uri = uri,
+        findVideo = mediaService::findVideo,
+    )
+
+    override suspend fun getVideoByUriWithoutProbing(uri: String): Video? = getVideoByUri(
+        uri = uri,
+        findVideo = mediaService::findVideoWithoutProbing,
+    )
+
+    private suspend fun getVideoByUri(
+        uri: String,
+        findVideo: suspend (Uri) -> MediaVideo?,
+    ): Video? = coroutineScope {
+        val mediaVideoDeferred = async { findVideo(uri.toUri()) }
         val mediaStateDeferred = async { mediumStateDao.get(uri = uri) }
 
         val mediaVideo = mediaVideoDeferred.await() ?: return@coroutineScope null

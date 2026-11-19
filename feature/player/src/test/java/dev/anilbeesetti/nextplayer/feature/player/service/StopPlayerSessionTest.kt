@@ -8,7 +8,9 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionResult
 import dev.anilbeesetti.nextplayer.core.data.repository.MediaRepository
+import dev.anilbeesetti.nextplayer.core.data.repository.PreferencesRepository
 import dev.anilbeesetti.nextplayer.core.data.repository.fake.FakeMediaRepository
+import dev.anilbeesetti.nextplayer.core.data.repository.fake.FakePreferencesRepository
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -248,6 +250,7 @@ class StopPlayerSessionTest {
         startKoin {
             modules(
                 modules = module {
+                    single<PreferencesRepository> { FakePreferencesRepository() }
                     single<MediaRepository> {
                         object : MediaRepository by FakeMediaRepository() {
                             override suspend fun updateMediumPosition(uri: String, position: Long) =

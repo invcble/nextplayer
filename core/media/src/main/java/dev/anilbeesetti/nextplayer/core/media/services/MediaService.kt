@@ -61,6 +61,9 @@ interface MediaService {
      */
     suspend fun findVideo(uri: Uri): MediaVideo?
 
+    /** Like [findVideo], but never probes the file for metadata MediaStore lacks. */
+    suspend fun findVideoWithoutProbing(uri: Uri): MediaVideo? = findVideo(uri)
+
     /**
      * Finds a specific folder by its path.
      *

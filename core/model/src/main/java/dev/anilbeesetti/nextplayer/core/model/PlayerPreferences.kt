@@ -13,6 +13,9 @@ data class PlayerPreferences(
     val playerVideoZoom: VideoContentScale = VideoContentScale.BEST_FIT,
     val defaultPlaybackSpeed: Float = 1.0f,
     val autoplay: Boolean = true,
+    val rememberVideoState: Boolean = true,
+    val autoLoadSubtitles: Boolean = true,
+    val lookupVideoTitle: Boolean = true,
     val enableTunneledPlayback: Boolean = false,
     val autoPip: Boolean = true,
     val autoBackgroundPlay: Boolean = false,
@@ -43,6 +46,7 @@ data class PlayerPreferences(
     val hidePlayerButtonsBackground: Boolean = false,
     val useMaterialYouControls: Boolean = false,
     val showRemainingTime: Boolean = false,
+    val hiddenPlayerButtons: Set<PlayerControlButton> = emptySet(),
 
     // Audio Preferences
     val preferredAudioLanguage: String = "",

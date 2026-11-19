@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dev.anilbeesetti.nextplayer.core.common.extensions.round
 import dev.anilbeesetti.nextplayer.core.data.repository.PreferencesRepository
 import dev.anilbeesetti.nextplayer.core.model.ControlButtonsPosition
+import dev.anilbeesetti.nextplayer.core.model.PlayerControlButton
 import dev.anilbeesetti.nextplayer.core.model.PlayerPreferences
 import dev.anilbeesetti.nextplayer.core.model.Resume
 import dev.anilbeesetti.nextplayer.core.model.ScreenOrientation
@@ -49,6 +50,14 @@ class PlayerPreferencesViewModel(
             is PlayerPreferencesUiEvent.UpdatePlaybackResume -> updatePlaybackResume(action.resume)
 
             is PlayerPreferencesUiEvent.ToggleAutoplay -> toggleAutoplay()
+
+            is PlayerPreferencesUiEvent.TogglePlayerButton -> togglePlayerButton(action.button)
+
+            is PlayerPreferencesUiEvent.ToggleRememberVideoState -> toggleRememberVideoState()
+
+            is PlayerPreferencesUiEvent.ToggleAutoLoadSubtitles -> toggleAutoLoadSubtitles()
+
+            is PlayerPreferencesUiEvent.ToggleLookupVideoTitle -> toggleLookupVideoTitle()
 
             is PlayerPreferencesUiEvent.ToggleTunneledPlayback -> toggleTunneledPlayback()
 
@@ -102,6 +111,40 @@ class PlayerPreferencesViewModel(
     private fun toggleAutoplay() {
         viewModelScope.launch {
             preferencesRepository.updatePlayerPreferences { it.copy(autoplay = !it.autoplay) }
+        }
+    }
+
+    private fun togglePlayerButton(button: PlayerControlButton) {
+        viewModelScope.launch {
+            preferencesRepository.updatePlayerPreferences {
+                val hidden = it.hiddenPlayerButtons
+                val updated = if (button in hidden) hidden - button else hidden + button
+                it.copy(hiddenPlayerButtons = updated)
+            }
+        }
+    }
+
+    private fun toggleRememberVideoState() {
+        viewModelScope.launch {
+            preferencesRepository.updatePlayerPreferences {
+                it.copy(rememberVideoState = !it.rememberVideoState)
+            }
+        }
+    }
+
+    private fun toggleAutoLoadSubtitles() {
+        viewModelScope.launch {
+            preferencesRepository.updatePlayerPreferences {
+                it.copy(autoLoadSubtitles = !it.autoLoadSubtitles)
+            }
+        }
+    }
+
+    private fun toggleLookupVideoTitle() {
+        viewModelScope.launch {
+            preferencesRepository.updatePlayerPreferences {
+                it.copy(lookupVideoTitle = !it.lookupVideoTitle)
+            }
         }
     }
 
@@ -194,6 +237,7 @@ sealed interface PlayerPreferenceDialog {
     data object ResumeDialog : PlayerPreferenceDialog
     data object PlayerScreenOrientationDialog : PlayerPreferenceDialog
     data object ControlButtonsDialog : PlayerPreferenceDialog
+    data object PlayerButtonsDialog : PlayerPreferenceDialog
 }
 
 sealed interface PlayerPreferencesUiEvent {
@@ -202,6 +246,10 @@ sealed interface PlayerPreferencesUiEvent {
     data class ShowDialog(val value: PlayerPreferenceDialog?) : PlayerPreferencesUiEvent
     data class UpdatePlaybackResume(val resume: Resume) : PlayerPreferencesUiEvent
     data object ToggleAutoplay : PlayerPreferencesUiEvent
+    data class TogglePlayerButton(val button: PlayerControlButton) : PlayerPreferencesUiEvent
+    data object ToggleRememberVideoState : PlayerPreferencesUiEvent
+    data object ToggleAutoLoadSubtitles : PlayerPreferencesUiEvent
+    data object ToggleLookupVideoTitle : PlayerPreferencesUiEvent
     data object ToggleTunneledPlayback : PlayerPreferencesUiEvent
     data object ToggleAutoPip : PlayerPreferencesUiEvent
     data object ToggleAutoBackgroundPlay : PlayerPreferencesUiEvent

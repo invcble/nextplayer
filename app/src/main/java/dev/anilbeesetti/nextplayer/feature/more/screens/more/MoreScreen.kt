@@ -165,12 +165,14 @@ internal fun MoreScreenContent(state: MoreUiState, onAction: (MoreAction) -> Uni
                         Spacer(modifier = Modifier.weight(weight = 1f))
                     }
                 }
-                HistorySection(
-                    history = state.history,
-                    preferences = state.preferences,
-                    onMoreClick = { onAction(MoreAction.OpenHistory) },
-                    onVideoClick = { onAction(MoreAction.PlayVideo(it.uriString)) },
-                )
+                if (state.showHistory) {
+                    HistorySection(
+                        history = state.history,
+                        preferences = state.preferences,
+                        onMoreClick = { onAction(MoreAction.OpenHistory) },
+                        onVideoClick = { onAction(MoreAction.PlayVideo(it.uriString)) },
+                    )
+                }
             }
         }
     }

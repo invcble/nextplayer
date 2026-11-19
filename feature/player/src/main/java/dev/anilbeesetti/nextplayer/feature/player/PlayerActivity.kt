@@ -31,6 +31,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionResult
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import dev.anilbeesetti.nextplayer.core.common.FolderQueueHandoff
 import dev.anilbeesetti.nextplayer.core.common.extensions.getInitialDirectoryUri
 import dev.anilbeesetti.nextplayer.core.common.extensions.getMediaContentUri
 import dev.anilbeesetti.nextplayer.core.common.service.registerForSuspendActivityResult
@@ -60,6 +61,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.filterNotNull
@@ -459,9 +461,21 @@ class PlayerActivity : ComponentActivity() {
 
         val mediaContentUri = if (request.isApiAccess) null else getMediaContentUri(uri)
         val explicitPlaylist = request.getPlaylist()
+        if (explicitPlaylist.isEmpty() && mediaContentUri != null && !request.launchInBackground) {
+            playThenFillFolderQueue(
+                request = request,
+                mediaContentUri = mediaContentUri,
+            )
+            return@withContext
+        }
+        val folderVideos = if (explicitPlaylist.isEmpty() && mediaContentUri != null) {
+            viewModel.getPlaylistFromUri(uri = mediaContentUri)
+        } else {
+            emptyList()
+        }
         val playlist = explicitPlaylist.takeIf { it.isNotEmpty() }
             ?: mediaContentUri?.let { mediaUri ->
-                viewModel.getPlaylistFromUri(uri = mediaUri)
+                folderVideos
                     .map { it.uriString }
                     .toMutableList()
                     .apply {
@@ -492,6 +506,7 @@ class PlayerActivity : ComponentActivity() {
             playlist,
             mediaItemIndexToPlay,
             apiSubs,
+            titlesByUri = folderVideos.associate { it.uriString to it.nameWithExtension },
         )
         ensureActive()
 
@@ -503,6 +518,106 @@ class PlayerActivity : ComponentActivity() {
                 request.position?.toLong() ?: C.TIME_UNSET,
             )
         }
+    }
+
+    /**
+     * Starts with the folder screen's handed-off queue when there is one; otherwise starts the
+     * selected video alone and adds the rest of its folder around it, so playback never waits on
+     * the folder query.
+     */
+    private suspend fun playThenFillFolderQueue(request: PlayerApi, mediaContentUri: Uri) =
+        coroutineScope {
+            val selectedUri = mediaContentUri.toString()
+            val apiSubs = request.apiSubtitleConfigurations()
+            val handedOffQueue = FolderQueueHandoff.take(selectedUri = selectedUri)
+            if (handedOffQueue != null) {
+                handedOffQueue.forEach {
+                    KnownVideoSizes.put(
+                        mediaId = it.uri,
+                        width = it.width,
+                        height = it.height,
+                    )
+                }
+                val playlist = handedOffQueue.map { it.uri }
+                val selectedIndex = playlist.indexOf(selectedUri)
+                val items = request.createMediaItems(
+                    playlist,
+                    selectedIndex,
+                    apiSubs,
+                    titlesByUri = handedOffQueue.associate { it.uri to it.title },
+                )
+                ensureActive()
+                withContext(Dispatchers.Main) {
+                    startQueue(
+                        request,
+                        items,
+                        selectedIndex,
+                        request.position?.toLong() ?: C.TIME_UNSET,
+                    )
+                }
+                return@coroutineScope
+            }
+            val startItems = request.createMediaItems(
+                listOf(selectedUri),
+                0,
+                apiSubs,
+            )
+            ensureActive()
+            withContext(Dispatchers.Main) {
+                startQueue(
+                    request,
+                    startItems,
+                    0,
+                    request.position?.toLong() ?: C.TIME_UNSET,
+                )
+            }
+
+            val folderVideos = viewModel.getPlaylistFromUri(uri = mediaContentUri)
+            folderVideos.forEach {
+                KnownVideoSizes.put(
+                    mediaId = it.uriString,
+                    width = it.width,
+                    height = it.height,
+                )
+            }
+            val playlist = folderVideos.map { it.uriString }.toMutableList().apply {
+                if (!contains(selectedUri)) {
+                    add(
+                        index = 0,
+                        element = selectedUri,
+                    )
+                }
+            }
+            val selectedIndex = playlist.indexOf(selectedUri)
+            val folderItems = request.createMediaItems(
+                playlist,
+                selectedIndex,
+                apiSubs,
+                titlesByUri = folderVideos.associate { it.uriString to it.nameWithExtension },
+            )
+            ensureActive()
+            withContext(Dispatchers.Main) {
+                val controller = mediaController ?: return@withContext
+                val isStillOnlySelected = controller.mediaItemCount == 1 &&
+                    controller.getMediaItemAt(0).mediaId == selectedUri
+                if (!isStillOnlySelected) return@withContext
+                controller.addMediaItems(folderItems.drop(selectedIndex + 1))
+                controller.addMediaItems(
+                    0,
+                    folderItems.take(selectedIndex),
+                )
+            }
+        }
+
+    private suspend fun PlayerApi.apiSubtitleConfigurations() = getSubs().map { subtitle ->
+        uriToSubtitleConfiguration(
+            uri = subtitle.uri,
+            subtitleEncoding = playerPreferences.subtitleTextEncoding,
+            isSelected = subtitle.isSelected,
+            label = subtitle.name,
+            filename = subtitle.filename,
+            useMediaSourceForNetwork = true,
+        )
     }
 
     private suspend fun startQueue(

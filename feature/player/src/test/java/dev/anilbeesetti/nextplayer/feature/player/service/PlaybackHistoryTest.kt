@@ -9,7 +9,9 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import coil3.ImageLoader
 import dev.anilbeesetti.nextplayer.core.data.repository.MediaRepository
+import dev.anilbeesetti.nextplayer.core.data.repository.PreferencesRepository
 import dev.anilbeesetti.nextplayer.core.data.repository.fake.FakeMediaRepository
+import dev.anilbeesetti.nextplayer.core.data.repository.fake.FakePreferencesRepository
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -50,6 +52,7 @@ class PlaybackHistoryTest {
         startKoin {
             modules(
                 modules = module {
+                    single<PreferencesRepository> { FakePreferencesRepository() }
                     single<MediaRepository> { repository }
                     single { ImageLoader.Builder(RuntimeEnvironment.getApplication()).build() }
                 },

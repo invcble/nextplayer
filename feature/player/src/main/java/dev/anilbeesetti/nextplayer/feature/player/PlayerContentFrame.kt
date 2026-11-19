@@ -9,12 +9,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.compose.PlayerSurface
@@ -44,11 +50,14 @@ fun PlayerContentFrame(
     displayAspectRatio: Float? = null,
 ) {
     val presentationState = rememberPresentationState(player = player)
+    val currentMediaId by rememberCurrentMediaId(player = player)
+    val videoSize = presentationState.videoSizeDp
+        ?: currentMediaId?.let(KnownVideoSizes::get)
     val videoModifier = Modifier
         .resizeWithContentScale(
             contentScale = videoZoomAndContentScaleState.videoContentScale
                 .toContentScale(),
-            sourceSizeDp = presentationState.videoSizeDp?.let { size ->
+            sourceSizeDp = videoSize?.let { size ->
                 size.copy(
                     width = with(LocalDensity.current) {
                         (
@@ -110,4 +119,20 @@ fun PlayerContentFrame(
             ShutterView()
         }
     }
+}
+
+@Composable
+private fun rememberCurrentMediaId(player: Player): State<String?> {
+    val mediaId = remember(player) { mutableStateOf(player.currentMediaItem?.mediaId) }
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                mediaId.value = mediaItem?.mediaId
+            }
+        }
+        player.addListener(listener)
+        mediaId.value = player.currentMediaItem?.mediaId
+        onDispose { player.removeListener(listener) }
+    }
+    return mediaId
 }

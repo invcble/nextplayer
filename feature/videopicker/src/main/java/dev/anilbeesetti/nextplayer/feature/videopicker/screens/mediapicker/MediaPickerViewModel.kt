@@ -8,9 +8,11 @@ import androidx.compose.runtime.Stable
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.viewModelScope
+import dev.anilbeesetti.nextplayer.core.common.FolderQueueHandoff
 import dev.anilbeesetti.nextplayer.core.common.extensions.prettyName
 import dev.anilbeesetti.nextplayer.core.common.service.system.SystemService
 import dev.anilbeesetti.nextplayer.core.common.storagePermission
+import dev.anilbeesetti.nextplayer.core.data.repository.FolderListCache
 import dev.anilbeesetti.nextplayer.core.data.repository.MediaRepository
 import dev.anilbeesetti.nextplayer.core.data.repository.PlaylistRepository
 import dev.anilbeesetti.nextplayer.core.data.repository.PreferencesRepository
@@ -45,6 +47,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
@@ -59,6 +62,7 @@ class MediaPickerViewModel(
     private val getSortedVideosUseCase: GetSortedVideosUseCase,
     private val mediaOperationsService: MediaOperationsService,
     private val mediaRepository: MediaRepository,
+    private val folderListCache: FolderListCache,
     private val playlistRepository: PlaylistRepository,
     private val preferencesRepository: PreferencesRepository,
     private val mediaSynchronizer: MediaSynchronizer,
@@ -112,7 +116,7 @@ class MediaPickerViewModel(
         when (action) {
             is MediaPickerAction.OnNavigateUpClick -> output.navigateUp()
 
-            is MediaPickerAction.OnPlayVideo -> output.playVideo(action.uri)
+            is MediaPickerAction.OnPlayVideo -> playVideo(action.uri)
 
             is MediaPickerAction.OnFolderClick -> output.openFolder(action.folderPath)
 
@@ -186,6 +190,22 @@ class MediaPickerViewModel(
         }
     }
 
+    private fun playVideo(uri: Uri) {
+        val visibleVideos = (state.value.mediaDataState as? DataState.Success)?.value?.videos
+        FolderQueueHandoff.offer(
+            selectedUri = uri.toString(),
+            entries = visibleVideos.orEmpty().map {
+                FolderQueueHandoff.Entry(
+                    uri = it.uriString,
+                    title = it.nameWithExtension,
+                    width = it.width,
+                    height = it.height,
+                )
+            },
+        )
+        output.playVideo(uri)
+    }
+
     private fun startMediaCollection() {
         mediaSynchronizer.startSync()
         collectMedia()
@@ -197,19 +217,54 @@ class MediaPickerViewModel(
             currentState.copy(mediaDataState = DataState.Loading)
         }
         mediaCollectJob = viewModelScope.launch {
+            launch { showCachedMediaWhileLoading() }
             launch {
                 getSortedMediaUseCase(folderPath).collect { media ->
                     stateInternal.update {
                         it.copy(mediaDataState = DataState.Success(value = media))
                     }
+                    media?.let { cacheMedia(it) }
                 }
             }
             launch {
-                getRecentlyPlayedVideoUseCase(folderPath).collect { recentlyPlayed ->
+                combine(
+                    getRecentlyPlayedVideoUseCase(folderPath),
+                    preferencesRepository.playerPreferences,
+                ) { recentlyPlayed, playerPreferences ->
+                    recentlyPlayed.takeIf { playerPreferences.rememberVideoState }
+                }.collect { recentlyPlayed ->
                     stateInternal.update { it.copy(recentlyPlayedVideo = recentlyPlayed) }
                 }
             }
         }
+    }
+
+    private val folderListCacheKey: String
+        get() = "${stateInternal.value.preferences.mediaViewMode}|${folderPath.orEmpty()}"
+
+    private suspend fun showCachedMediaWhileLoading() {
+        val cached = folderListCache.read(key = folderListCacheKey) ?: return
+        stateInternal.update {
+            if (it.mediaDataState !is DataState.Loading) return@update it
+            it.copy(
+                mediaDataState = DataState.Success(
+                    value = MediaHolder(
+                        videos = cached.videos,
+                        folders = cached.folders,
+                    ),
+                ),
+            )
+        }
+    }
+
+    private suspend fun cacheMedia(media: MediaHolder) {
+        folderListCache.write(
+            key = folderListCacheKey,
+            entry = FolderListCache.Entry(
+                videos = media.videos,
+                folders = media.folders,
+            ),
+        )
     }
 
     private fun collectPreferences() {

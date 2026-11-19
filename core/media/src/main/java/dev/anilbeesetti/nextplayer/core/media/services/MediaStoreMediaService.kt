@@ -8,26 +8,32 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
-import android.util.LruCache
 import androidx.annotation.RequiresApi
 import dev.anilbeesetti.nextplayer.core.common.di.DiQualifiers
 import dev.anilbeesetti.nextplayer.core.common.extensions.VIDEO_COLLECTION_URI
 import dev.anilbeesetti.nextplayer.core.common.extensions.prettyName
+import dev.anilbeesetti.nextplayer.core.database.dao.VideoMetadataDao
+import dev.anilbeesetti.nextplayer.core.database.entities.VideoMetadataEntity
 import io.github.anilbeesetti.nextlib.mediainfo.MediaInfoBuilder
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.core.annotation.Named
 import org.koin.core.annotation.Single
@@ -43,14 +49,21 @@ import org.koin.core.annotation.Single
 class MediaStoreMediaService(
     private val context: Context,
     @Named(DiQualifiers.APPLICATION_SCOPE) private val applicationScope: CoroutineScope,
+    private val videoMetadataDao: VideoMetadataDao,
 ) : MediaService {
 
-    private data class MetadataKey(val uri: Uri, val size: Long, val modified: Long)
-    private data class VideoMetadata(val duration: Long, val width: Int, val height: Int)
-    private val missingMetadata = LruCache<MetadataKey, VideoMetadata>(256)
+    private data class VideoMetadata(val duration: Long, val width: Int, val height: Int) {
+        val isComplete: Boolean get() = duration > 0 && width > 0 && height > 0
+    }
+
+    private val probeDispatcher = Dispatchers.IO.limitedParallelism(PROBE_PARALLELISM)
+    private val probingUris = mutableSetOf<Uri>()
 
     companion object {
         private const val OBSERVER_DEBOUNCE_MS = 250L
+        private const val PROBE_PARALLELISM = 2
+        private const val PROBE_BATCH_SIZE = 20
+        private const val DELETE_BATCH_SIZE = 500
 
         private val VIDEO_PROJECTION = arrayOf(
             MediaStore.Video.Media._ID,
@@ -94,17 +107,50 @@ class MediaStoreMediaService(
             replay = 1,
         )
 
-    override fun observeFolders(folderPath: String?): Flow<List<MediaFolder>> = observeMedia {
-        fetchFolders(folderPath = folderPath)
-    }
+    override fun observeFolders(folderPath: String?): Flow<List<MediaFolder>> =
+        observeVideos(folderPath = folderPath).map { it.toFolders() }
 
-    override fun observeVideos(folderPath: String?): Flow<List<MediaVideo>> = observeMedia {
-        fetchVideos(folderPath = folderPath)
-    }
+    override fun observeVideos(folderPath: String?): Flow<List<MediaVideo>> = withStoredMetadata(
+        videos = observeMedia { queryVideos(folderPath = folderPath) },
+        pruneStaleMetadata = folderPath == null,
+    )
 
-    override fun observeTrashVideos(): Flow<List<MediaVideo>> = observeMedia {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) queryTrashVideos() else emptyList()
+    override fun observeTrashVideos(): Flow<List<MediaVideo>> = withStoredMetadata(
+        videos = observeMedia {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) queryTrashVideos() else emptyList()
+        },
+        pruneStaleMetadata = false,
+    )
+
+    /**
+     * Fills metadata MediaStore lacks from the stored probe results. Probing runs in the
+     * background once per MediaStore query, so the list shows immediately and updates as
+     * results are stored.
+     */
+    private fun withStoredMetadata(
+        videos: Flow<List<MediaVideo>>,
+        pruneStaleMetadata: Boolean,
+    ): Flow<List<MediaVideo>> = combine(
+        videos.onEach { queried ->
+            val stored = videoMetadataDao.getAll().associateBy { it.uriString }
+            probeMissingMetadataInBackground(
+                videos = queried,
+                stored = stored,
+            )
+            if (pruneStaleMetadata) {
+                pruneStaleMetadataInBackground(
+                    videos = queried,
+                    stored = stored,
+                )
+            }
+        },
+        videoMetadataDao.observeAll(),
+    ) { queried, stored ->
+        val storedByUri = stored.associateBy { it.uriString }
+        queried.map { it.withStoredMetadata(storedByUri[it.uri.toString()]) }
     }
+        .flowOn(Dispatchers.IO)
+        .distinctUntilChanged()
 
     private fun <T> observeMedia(query: suspend () -> List<T>): Flow<List<T>> = mediaChanges
         .map {
@@ -126,32 +172,50 @@ class MediaStoreMediaService(
         .distinctUntilChanged()
 
     override suspend fun fetchFolders(folderPath: String?): List<MediaFolder> =
-        withContext(Dispatchers.IO) {
-            val videos = fetchVideos(folderPath = folderPath)
+        fetchVideos(folderPath = folderPath).toFolders()
 
-            val videosByFolder = videos.groupBy { File(it.path).parentFile }
-
-            return@withContext videosByFolder.mapNotNull { (folder, folderVideos) ->
-                folder?.let {
-                    MediaFolder(
-                        path = it.path,
-                        name = it.prettyName,
-                        dateModified =
-                            folderVideos.maxOfOrNull { video -> video.dateModified } ?: 0L,
-                        totalSize = folderVideos.sumOf { video -> video.size },
-                        totalDuration = folderVideos.sumOf { video -> video.duration },
-                        videosCount = folderVideos.size,
-                        foldersCount = 0,
-                    )
-                }
+    private fun List<MediaVideo>.toFolders(): List<MediaFolder> =
+        groupBy { File(it.path).parentFile }.mapNotNull { (folder, folderVideos) ->
+            folder?.let {
+                MediaFolder(
+                    path = it.path,
+                    name = it.prettyName,
+                    dateModified =
+                        folderVideos.maxOfOrNull { video -> video.dateModified } ?: 0L,
+                    totalSize = folderVideos.sumOf { video -> video.size },
+                    totalDuration = folderVideos.sumOf { video -> video.duration },
+                    videosCount = folderVideos.size,
+                    foldersCount = 0,
+                )
             }
         }
 
     override suspend fun fetchVideos(folderPath: String?): List<MediaVideo> =
-        withContext(Dispatchers.IO) { queryVideos(folderPath = folderPath) }
+        withContext(Dispatchers.IO) {
+            val videos = queryVideos(folderPath = folderPath)
+            val stored = videoMetadataDao.getAll().associateBy { it.uriString }
+            videos.map { it.withStoredMetadata(stored[it.uri.toString()]) }
+        }
+
+    override suspend fun findVideoWithoutProbing(uri: Uri): MediaVideo? =
+        withContext(Dispatchers.IO) {
+            val video = queryVideo(uri = uri) ?: return@withContext null
+            if (!video.isMissingMetadata) return@withContext video
+            video.withStoredMetadata(videoMetadataDao.get(uriString = video.uri.toString()))
+        }
 
     override suspend fun findVideo(uri: Uri): MediaVideo? = withContext(Dispatchers.IO) {
-        return@withContext try {
+        val video = queryVideo(uri = uri) ?: return@withContext null
+        if (!video.isMissingMetadata) return@withContext video
+        val stored = videoMetadataDao.get(uriString = video.uri.toString())
+        if (stored?.matches(video) == true) return@withContext video.withStoredMetadata(stored)
+        val probed = video.probeMetadata() ?: return@withContext video
+        if (probed.isComplete) videoMetadataDao.upsert(probed.toEntity(video))
+        video.filledWith(probed)
+    }
+
+    private fun queryVideo(uri: Uri): MediaVideo? {
+        return try {
             context.contentResolver.query(
                 uri,
                 VIDEO_PROJECTION,
@@ -159,7 +223,7 @@ class MediaStoreMediaService(
                 null,
                 null,
             )?.use { cursor ->
-                if (!cursor.moveToFirst()) return@withContext null
+                if (!cursor.moveToFirst()) return null
                 cursor.toMediaVideo()
             }
         } catch (e: Exception) {
@@ -331,49 +395,98 @@ class MediaStoreMediaService(
             size = getLong(sizeIndex),
             dateModified = getLong(dateModifiedIndex),
             dateAdded = getLong(dateAddedIndex),
-        ).withMissingMetadata()
+        )
     }
 
-    private fun MediaVideo.withMissingMetadata(): MediaVideo {
-        // shortcut: probe on IO; use background indexing if incomplete files slow initial scans.
-        if (duration > 0 && width > 0 && height > 0) return this
-        val key = MetadataKey(
+    private val MediaVideo.isMissingMetadata: Boolean
+        get() = duration <= 0 || width <= 0 || height <= 0
+
+    private fun VideoMetadataEntity.matches(video: MediaVideo): Boolean =
+        size == video.size && dateModified == video.dateModified
+
+    private fun MediaVideo.withStoredMetadata(stored: VideoMetadataEntity?): MediaVideo {
+        if (!isMissingMetadata || stored == null || !stored.matches(this)) return this
+        return filledWith(
+            VideoMetadata(
+                duration = stored.duration,
+                width = stored.width,
+                height = stored.height,
+            ),
+        )
+    }
+
+    private fun MediaVideo.filledWith(metadata: VideoMetadata): MediaVideo = copy(
+        duration = duration.takeIf { it > 0 } ?: metadata.duration,
+        width = width.takeIf { it > 0 } ?: metadata.width,
+        height = height.takeIf { it > 0 } ?: metadata.height,
+    )
+
+    private fun VideoMetadata.toEntity(video: MediaVideo) = VideoMetadataEntity(
+        uriString = video.uri.toString(),
+        size = video.size,
+        dateModified = video.dateModified,
+        duration = duration,
+        width = width,
+        height = height,
+    )
+
+    private fun MediaVideo.probeMetadata(): VideoMetadata? = try {
+        context.contentResolver.openFileDescriptor(
             uri,
-            size,
-            dateModified,
-        )
-        val metadata = synchronized(missingMetadata) {
-            missingMetadata.get(key) ?: try {
-                context.contentResolver.openFileDescriptor(
-                    uri,
-                    "r",
-                )?.use { descriptor ->
-                    val info = MediaInfoBuilder().from(descriptor).build() ?: return@use null
-                    try {
-                        VideoMetadata(
-                            duration = info.duration.coerceAtLeast(0),
-                            width = info.videoStream?.frameWidth ?: 0,
-                            height = info.videoStream?.frameHeight ?: 0,
-                        ).also {
-                            if (it.duration > 0 && it.width > 0 && it.height > 0) {
-                                missingMetadata.put(
-                                    key,
-                                    it,
-                                )
-                            }
-                        }
-                    } finally {
-                        info.release()
-                    }
-                }
-            } catch (_: Exception) {
-                null
+            "r",
+        )?.use { descriptor ->
+            val info = MediaInfoBuilder().from(descriptor).build() ?: return@use null
+            try {
+                VideoMetadata(
+                    duration = info.duration.coerceAtLeast(0),
+                    width = info.videoStream?.frameWidth ?: 0,
+                    height = info.videoStream?.frameHeight ?: 0,
+                )
+            } finally {
+                info.release()
             }
-        } ?: return this
-        return copy(
-            duration = duration.takeIf { it > 0 } ?: metadata.duration,
-            width = width.takeIf { it > 0 } ?: metadata.width,
-            height = height.takeIf { it > 0 } ?: metadata.height,
-        )
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    /**
+     * Only complete results are stored; unreadable or incomplete files are retried on the
+     * next MediaStore query because they may be temporarily unavailable or still being written.
+     */
+    private fun probeMissingMetadataInBackground(
+        videos: List<MediaVideo>,
+        stored: Map<String, VideoMetadataEntity>,
+    ) {
+        val pending = videos.filter { video ->
+            video.isMissingMetadata && stored[video.uri.toString()]?.matches(video) != true
+        }.filter { video -> synchronized(probingUris) { probingUris.add(video.uri) } }
+        if (pending.isEmpty()) return
+        applicationScope.launch(Dispatchers.IO) {
+            try {
+                pending.chunked(PROBE_BATCH_SIZE).forEach { batch ->
+                    val probed = batch.map { video ->
+                        async(probeDispatcher) { video to video.probeMetadata() }
+                    }.awaitAll()
+                    val complete = probed.mapNotNull { (video, metadata) ->
+                        metadata?.takeIf { it.isComplete }?.toEntity(video)
+                    }
+                    if (complete.isNotEmpty()) videoMetadataDao.upsertAll(complete)
+                }
+            } finally {
+                synchronized(probingUris) { probingUris.removeAll(pending.map { it.uri }.toSet()) }
+            }
+        }
+    }
+
+    private fun pruneStaleMetadataInBackground(
+        videos: List<MediaVideo>,
+        stored: Map<String, VideoMetadataEntity>,
+    ) {
+        val stale = stored.keys - videos.map { it.uri.toString() }.toSet()
+        if (stale.isEmpty()) return
+        applicationScope.launch(Dispatchers.IO) {
+            stale.chunked(DELETE_BATCH_SIZE).forEach { videoMetadataDao.deleteByUris(it) }
+        }
     }
 }

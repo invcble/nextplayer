@@ -30,6 +30,9 @@ class PlayerViewModel(
     private val getSortedPlaylistUseCase: GetSortedPlaylistUseCase,
     @InjectedParam internal var output: Output,
 ) : MviViewModel<PlayerUiState, PlayerAction>() {
+    private val videoStateStore = VideoStateStore(mediaRepository) {
+        preferencesRepository.playerPreferences.value.rememberVideoState
+    }
 
     data class Output(
         val navigateUp: () -> Unit,
@@ -98,7 +101,7 @@ class PlayerViewModel(
 
     private fun updateVideoZoom(uri: String, zoom: Float) {
         viewModelScope.launch {
-            mediaRepository.updateMediumZoom(
+            videoStateStore.updateMediumZoom(
                 uri = uri,
                 zoom = zoom,
             )
@@ -174,7 +177,7 @@ class PlayerViewModel(
 
     private fun updateSubtitleDelay(uri: String, delay: Long) {
         viewModelScope.launch {
-            mediaRepository.updateSubtitleDelay(
+            videoStateStore.updateSubtitleDelay(
                 uri = uri,
                 delay = delay,
             )
@@ -183,7 +186,7 @@ class PlayerViewModel(
 
     private fun updateSubtitleSpeed(uri: String, speed: Float) {
         viewModelScope.launch {
-            mediaRepository.updateSubtitleSpeed(
+            videoStateStore.updateSubtitleSpeed(
                 uri = uri,
                 speed = speed,
             )

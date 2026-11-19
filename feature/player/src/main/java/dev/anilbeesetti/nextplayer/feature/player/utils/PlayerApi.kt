@@ -99,6 +99,7 @@ class PlayerApi(private val intent: Intent) {
         playlist: List<String>,
         selectedIndex: Int,
         subtitles: List<MediaItem.SubtitleConfiguration>,
+        titlesByUri: Map<String, String> = emptyMap(),
     ): List<MediaItem> {
         val suppliedUris = extras?.getParcelableUriArray(API_PLAYLIST).orEmpty()
         val suppliedIndices = suppliedUris.withIndex()
@@ -130,7 +131,7 @@ class PlayerApi(private val intent: Intent) {
                 names.getOrNull(suppliedIndex) as? String
             } else {
                 title.takeIf { index == selectedIndex }
-            }
+            } ?: titlesByUri[uri]
             MediaItem.Builder()
                 .setUri(uri)
                 .setMediaId(uri)

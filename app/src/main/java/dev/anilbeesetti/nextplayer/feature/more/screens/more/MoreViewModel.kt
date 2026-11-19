@@ -37,6 +37,11 @@ class MoreViewModel(
                 }
         }
         viewModelScope.launch {
+            preferencesRepository.playerPreferences.collect { preferences ->
+                stateInternal.update { it.copy(showHistory = preferences.rememberVideoState) }
+            }
+        }
+        viewModelScope.launch {
             preferencesRepository.applicationPreferences.collect { preferences ->
                 stateInternal.update { it.copy(preferences = preferences) }
             }
@@ -64,6 +69,7 @@ class MoreViewModel(
 
 data class MoreUiState(
     val history: DataState<List<Video>> = DataState.Loading,
+    val showHistory: Boolean = true,
     val preferences: ApplicationPreferences = ApplicationPreferences(),
 )
 

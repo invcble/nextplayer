@@ -41,6 +41,7 @@ class MediaStoreMediaServiceTest {
     private val service = MediaStoreMediaService(
         context = context,
         applicationScope = scope,
+        videoMetadataDao = FakeVideoMetadataDao(),
     )
 
     @Before
